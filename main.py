@@ -7,10 +7,10 @@ from enum import Enum
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QStackedWidget, QGraphicsView,
-    QGraphicsScene, QGraphicsOpacityEffect, QFrame, QGraphicsItem, QGraphicsTextItem
+    QStackedWidget, QGraphicsView, QPinchGesture,
+    QGraphicsScene, QGraphicsOpacityEffect, QFrame, QGraphicsItem, QGraphicsTextItem, QAbstractScrollArea, QGestureEvent, QPanGesture
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QRectF
+from PySide6.QtCore import Qt, QPropertyAnimation, QRectF, QTimer, QEvent
 from PySide6.QtGui import QFont, QPainter, QIcon, QFontDatabase, QColor
 
 # =========================
@@ -176,7 +176,7 @@ class CanvasCard(QGraphicsItem):
 class CanvasScene(QGraphicsScene):
     def __init__(self):
         super().__init__()
-        self.setSceneRect(-5000, -5000, 10000, 10000)
+        self.setSceneRect(-3000, -3000, 4000, 2000)
 
     def create_card(self, pos, card_type):
         card = CanvasCard(pos.x(), pos.y(), card_type)
@@ -210,27 +210,147 @@ class CanvasView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
 
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        #ativar e desativar barras
+        #self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        #self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        self.setDragMode(QGraphicsView.RubberBandDrag)
+        #zoom trackpad
+        self.grabGesture(Qt.PinchGesture)
+       
+        #pan
+        self._panning = False
+        self._pan_start = None
 
+        #pan trackpad
+        self.grabGesture(Qt.PanGesture)
+        
         self.current_card_type = CardType.TEXT
 
-        self._zoom = 0
+        self.zoom_factor = 1.0
+        self.zoom_min = 0.5
+        self.zoom_max = 3.14
+
+        # 🔹 indicador de zoom
+        self.zoom_label = QLabel("100%", self)
+        self.zoom_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(0, 0, 0, 40);
+                color: white;
+                padding: 4px 8px;
+                border-radius: 6px;
+                font-size: 12px;
+            }
+        """)
+
+        self.zoom_label.setAlignment(Qt.AlignCenter)
+        self.zoom_label.adjustSize()
+        self.zoom_label.hide()
+
+        # efeito de opacidade
+        self.zoom_effect = QGraphicsOpacityEffect(self.zoom_label)
+        self.zoom_label.setGraphicsEffect(self.zoom_effect)
+        self.zoom_effect.setOpacity(1.0)
+
+        # timer para esconder
+        self.zoom_hide_timer = QTimer(self)
+        self.zoom_hide_timer.setSingleShot(True)
+        self.zoom_hide_timer.timeout.connect(self._fade_out_zoom_label)
+
+        self.zoom_label.move(12, 12)
+        self.zoom_label.show()
+
+    def event(self, event):
+        if event.type() == QEvent.Gesture:
+            return self.gestureEvent(event)
+        return super().event(event)
+
+    def gestureEvent(self, event):
+        pan = event.gesture(Qt.PanGesture)
+        if pan:
+            delta = pan.delta()
+
+            hbar = self.horizontalScrollBar()
+            vbar = self.verticalScrollBar()
+
+            hbar.setValue(hbar.value() - int(delta.x()))
+            vbar.setValue(vbar.value() - int(delta.y()))
+
+        pinch = event.gesture(Qt.PinchGesture)
+
+        if pinch:
+           self.handle_pinch(pinch)
+
+        return True
+
+    def handle_pinch(self, pinch: QPinchGesture):
+        if pinch.state() == Qt.GestureStarted:
+            self._pinch_start_zoom = self._zoom
+            return
+
+        scale = pinch.scaleFactor()
+
+        zoom_step = 1.08
+        zoom_delta = math.log(scale, zoom_step)
+
+        new_zoom = self._zoom + zoom_delta
+
+        MIN_ZOOM = -15
+        MAX_ZOOM = 40
+
+        if MIN_ZOOM <= new_zoom <= MAX_ZOOM:
+            self.scale(scale, scale)
+            self._zoom = new_zoom
+            self.update_zoom_label()
+
+    def _position_zoom_label(self):
+        margin_bottom = 20  # espaço acima da barra
+        x = (self.width() - self.zoom_label.width()) // 2
+        y = self.height() - self.zoom_label.height() - margin_bottom
+        self.zoom_label.move(x, y)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._position_zoom_label()
+
+    def _fade_out_zoom_label(self):
+        anim = QPropertyAnimation(self.zoom_effect, b"opacity", self)
+        anim.setDuration(300)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+
+        def hide():
+            self.zoom_label.hide()
+
+        anim.finished.connect(hide)
+        anim.start()
+
+        self._zoom_fade_anim = anim  # evita GC
 
     def wheelEvent(self, event):
-        zoom_factor = 1.08  # antes era 1.15 (muito agressivo)
+        zoom_step = 1.12  # mais suave
 
         if event.angleDelta().y() > 0:
-             factor = zoom_factor
-             self._zoom += 1
+            new_zoom = self.zoom_factor * zoom_step
         else:
-             factor = 1 / zoom_factor
-             self._zoom -= 1
+            new_zoom = self.zoom_factor / zoom_step
 
-        if -15 < self._zoom < 40:
-             self.scale(factor, factor)
+        if self.zoom_min <= new_zoom <= self.zoom_max:
+            factor = new_zoom / self.zoom_factor
+            self.zoom_factor = new_zoom
+            self.scale(factor, factor)
+
+            percent = int(self.zoom_factor * 100)
+            self.zoom_label.setText(f"{percent}%")
+            self.zoom_label.adjustSize()
+            self._position_zoom_label()
+
+            # mostrar label
+            self.zoom_hide_timer.stop()
+            self.zoom_label.show()
+            self.zoom_effect.setOpacity(1.0)
+
+            # esconder após 1s
+            self.zoom_hide_timer.start(1000)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -241,27 +361,36 @@ class CanvasView(QGraphicsView):
             super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event):
-         if event.button() == Qt.MiddleButton:
-             self.setDragMode(QGraphicsView.NoDrag)
-             self._pan_start = event.position()
-             event.accept()
-         else:
-             super().mousePressEvent(event)
+        if event.button() == Qt.MiddleButton:
+            self._panning = True
+            self._pan_start = event.position()
+            self.setCursor(Qt.ClosedHandCursor)
+            event.accept()
+        else:
+            super().mousePressEvent(event)
 
-def mouseMoveEvent(self, event):
-    if event.buttons() & Qt.MiddleButton:
-        delta = self.mapToScene(self._pan_start.toPoint()) - self.mapToScene(event.position().toPoint())
-        self._pan_start = event.position()
-        self.translate(delta.x(), delta.y())
-        event.accept()
-    else:
-        super().mouseMoveEvent(event)
+    def mouseMoveEvent(self, event):
+        if self._panning and self._pan_start is not None:
+            delta = event.position() - self._pan_start
+            self._pan_start = event.position()
 
-def mouseReleaseEvent(self, event):
-    if event.button() == Qt.MiddleButton:
-        event.accept()
-    else:
-        super().mouseReleaseEvent(event)
+            hbar = self.horizontalScrollBar()
+            vbar = self.verticalScrollBar()
+
+            hbar.setValue(hbar.value() - int(delta.x()))
+            vbar.setValue(vbar.value() - int(delta.y()))
+
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MiddleButton:
+            self._panning = False
+            self.setCursor(Qt.ArrowCursor)
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
 
 # =========================
 # MAIN WINDOW
