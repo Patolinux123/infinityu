@@ -26,11 +26,6 @@ PLACEHOLDER_TEXTS = [
     "Suas notinhas..."
 ]
 
-class CardType(Enum):
-    TEXT = 1
-    TITLE = 2
-    CHECKLIST = 3
-
 # =========================
 # WELCOME SCREEN
 # =========================
@@ -72,7 +67,26 @@ class WelcomeScreen(QWidget):
     "GRIFFITH!",
     "Também experimente Minecraft!",
     "Alguém lê isso mesmo?",
-    "41, o número mais malvado de todos..."
+    "41, o número mais malvado de todos...",
+    "Tão incrível quanto macacos árticos...",
+    "A épica nunca pediria sua senha...",
+    "Eu... te... vi... Lá no canto da sala...",
+    "UwU",
+
+    "As coisa cai...",
+    "Só sabo que nada sebo...",
+    "Penso. Logo desisto...",
+    "O homem nasce bom. As assinaturas o corrompem...",
+
+    "nada 👍",
+    "Só inicia logo o app 😒",
+    "Não se envergonhe, é só clicar aqui 👇",
+
+    "Robux grátis >aqui<",
+    "Não se esqueça de alimentar o seu Pou..."
+    "Eu sempre volto..."
+
+
 ]
         subtitle = QLabel(random.choice(phrases))
         subtitle.setAlignment(Qt.AlignCenter)
@@ -108,7 +122,7 @@ class WelcomeScreen(QWidget):
 # CANVAS
 # =========================
 class CanvasCard(QGraphicsItem):
-    def __init__(self, x, y, card_type):
+    def __init__(self, x, y):
         super().__init__()
 
         self.rect = QRectF(0, 0, 220, 140)
@@ -126,8 +140,6 @@ class CanvasCard(QGraphicsItem):
 
         self.text_item.focusInEvent = self._on_focus_in
         self.text_item.focusOutEvent = self._on_focus_out
-
-        self.card_type = card_type
 
         self.placeholder_text = random.choice(PLACEHOLDER_TEXTS)
         self.is_placeholder = True
@@ -178,8 +190,8 @@ class CanvasScene(QGraphicsScene):
         super().__init__()
         self.setSceneRect(-3000, -3000, 4000, 2000)
 
-    def create_card(self, pos, card_type):
-        card = CanvasCard(pos.x(), pos.y(), card_type)
+    def create_card(self, pos):
+        card = CanvasCard(pos.x(), pos.y())
         self.addItem(card)
 
     def drawBackground(self, painter, rect):
@@ -198,6 +210,27 @@ class CanvasScene(QGraphicsScene):
              for y in range(top, int(rect.bottom()), grid):
                  painter.drawEllipse(x - radius, y - radius, radius * 2, radius * 2)
 
+class FloatingButton(QPushButton):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+
+        self.setFixedSize(42, 42)
+        self.setCursor(Qt.PointingHandCursor)
+
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #2f2f2f;
+                color: #ddd;
+                border-radius: 10px;
+                font-size: 18px;
+            }
+            QPushButton:hover {
+                background-color: #3a3a3a;
+            }
+            QPushButton:pressed {
+                background-color: #444;
+            }
+        """)
 
 class CanvasView(QGraphicsView):
     def __init__(self):
@@ -210,9 +243,18 @@ class CanvasView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
 
+        #add ui
+
         #ativar e desativar barras
         #self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         #self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # 🔹 botões flutuantes
+        self.tools_btn = FloatingButton("🧰", self)
+        self.settings_btn = FloatingButton("⚙️", self)
+
+        self.tools_btn.clicked.connect(self.on_tools_clicked)
+        self.settings_btn.clicked.connect(self.on_settings_clicked)
 
         #zoom trackpad
         self.grabGesture(Qt.PinchGesture)
@@ -223,8 +265,6 @@ class CanvasView(QGraphicsView):
 
         #pan trackpad
         self.grabGesture(Qt.PanGesture)
-        
-        self.current_card_type = CardType.TEXT
 
         self.zoom_factor = 1.0
         self.zoom_min = 0.5
@@ -310,7 +350,25 @@ class CanvasView(QGraphicsView):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+
+        # 🔹 reposiciona label de zoom
         self._position_zoom_label()
+
+        # 🔹 reposiciona botões flutuantes
+        margin = 32
+        y = self.height() - self.tools_btn.height() - margin
+
+        self.tools_btn.move(margin, y)
+        self.settings_btn.move(
+            self.width() - self.settings_btn.width() - margin,
+            y
+    )
+
+    def on_tools_clicked(self):
+        print("Ferramentas clicado")
+
+    def on_settings_clicked(self):
+        print("Configurações clicado")
 
     def _fade_out_zoom_label(self):
         anim = QPropertyAnimation(self.zoom_effect, b"opacity", self)
@@ -355,7 +413,7 @@ class CanvasView(QGraphicsView):
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
             pos = self.mapToScene(event.position().toPoint())
-            self.scene.create_card(pos, self.current_card_type)
+            self.scene.create_card(pos)
             event.accept()
         else:
             super().mouseDoubleClickEvent(event)
@@ -426,13 +484,8 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.canvas)
         self.stack.setCurrentWidget(self.welcome)
 
-        # 🔹 bottom bar (CRIA AQUI)
-        self.bottom_bar = BottomBar(self.canvas)
-        self.bottom_bar.hide()  # começa escondida
-
         # 🔹 adiciona ao layout (ORDEM IMPORTA)
         self.container_layout.addWidget(self.stack, 1)
-        self.container_layout.addWidget(self.bottom_bar, 0)
 
         self.setCentralWidget(self.container)
 
@@ -453,7 +506,6 @@ class MainWindow(QMainWindow):
          def on_fade_out_finished():
         # troca a tela
              self.stack.setCurrentWidget(self.canvas)
-             self.bottom_bar.show()
 
              fade_in = QPropertyAnimation(effect, b"opacity")
              fade_in.setDuration(250)
@@ -475,68 +527,6 @@ class MainWindow(QMainWindow):
          fade_out.finished.connect(on_fade_out_finished)
          fade_out.start()
          self.fade_out = fade_out
-
-# =========================
-# THE BAR
-# =========================
-
-class BottomBar(QWidget):
-    def __init__(self, canvas: CanvasView):
-        super().__init__()
-        self.canvas = canvas
-
-        self.setFixedHeight(64)
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #262626;
-                border-top: 1px solid #333;
-            }
-            QPushButton {
-                background-color: #333;
-                color: #ddd;
-                border-radius: 8px;
-                padding: 8px 14px;
-            }
-            QPushButton:hover {
-                background-color: #444;
-            }
-            QPushButton:checked {
-                background-color: #5b7cfa;
-                color: white;
-            }
-        """)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(10)
-
-        self.btn_text = QPushButton("Texto")
-        self.btn_title = QPushButton("Título")
-        self.btn_check = QPushButton("Checklist")
-
-        for btn in (self.btn_text, self.btn_title, self.btn_check):
-            btn.setCheckable(True)
-            layout.addWidget(btn)
-
-        self.btn_text.setChecked(True)
-
-        self.btn_text.clicked.connect(lambda: self.set_type(CardType.TEXT))
-        self.btn_title.clicked.connect(lambda: self.set_type(CardType.TITLE))
-        self.btn_check.clicked.connect(lambda: self.set_type(CardType.CHECKLIST))
-
-    def set_type(self, card_type):
-        self.canvas.current_card_type = card_type
-
-        # garante apenas um ativo
-        for btn in (self.btn_text, self.btn_title, self.btn_check):
-            btn.setChecked(False)
-
-        if card_type == CardType.TEXT:
-            self.btn_text.setChecked(True)
-        elif card_type == CardType.TITLE:
-            self.btn_title.setChecked(True)
-        elif card_type == CardType.CHECKLIST:
-            self.btn_check.setChecked(True)
 
 # =========================
 # APP
