@@ -1,0 +1,6 @@
+APP_NAME = "infinityu"
+APP_VERSION = "0.1.0-alpha"
+APP_AUTHOR = "João Gabriel Flores"
+APP_GITHUB = "https://github.com/Patolinux123"
+APP_TECH = "Made with PySide6 & Qt"
+APP_TAGLINE = "Funciona… mais ou menos (não funciona ainda 👍)"

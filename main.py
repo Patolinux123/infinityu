@@ -1,20 +1,27 @@
 import sys
 import math
 import random
+import json
+
+from app_info import *
+
+from pathlib import Path
 
 from enum import Enum
+
+from datetime import datetime
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QStackedWidget, QGraphicsView, QPinchGesture,
+    QStackedWidget, QGraphicsView, QPinchGesture, QDialog, QTabWidget,
     QGraphicsScene, QGraphicsOpacityEffect, QFrame, QGraphicsItem, QGraphicsTextItem, QAbstractScrollArea, QGestureEvent, QPanGesture
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QRectF, QTimer, QEvent
 from PySide6.QtGui import QFont, QPainter, QIcon, QFontDatabase, QColor
 
 # =========================
-# some stuff
+# stuff
 # =========================
 
 PLACEHOLDER_TEXTS = [
@@ -25,6 +32,62 @@ PLACEHOLDER_TEXTS = [
     "Escreva maravilhas…",
     "Suas notinhas..."
 ]
+
+TIME_PHRASES = {
+    "morning": [
+        "Bom dia! Ideias ainda estão acordando...",
+        "Café primeiro. Ideias depois...",
+        "O dia está só começando. Aproveite..."
+    ],
+    "afternoon": [
+        "Boa tarde! Ideias prontas pro serviço...",
+        "Um café da tarde seria bom...",
+        "Nunca é tarde demais!"
+    ],
+    "night": [
+        "Boa noite! Ideias indo para a cama...",
+        "O sol se põe e nasce a lua...",
+        "Brilha, brilha, estrelinha ⭐"
+    ],
+    "late": [
+        "Ideia das 3 da manhã 😴",
+        "Deitar é para os fracos!",
+        "Pare. Anote. Durma.",
+        "Nesse horário, ou sua melhor ideia ou sua outra melhor ideia...",
+        "Ei! Eu quero dormir também! 🥱"
+    ]
+}
+
+PHRASES_WEIGHTED = [
+    
+    ("Infinidade. Para ir além...", 10),
+    ("Não vai te deixar no vácuo...", 10),
+    ("Organize o caos. Ou abrace ele...", 10),
+
+]
+
+def get_time_period():
+    hour = datetime.now().hour
+
+    if 6 <= hour < 12:
+        return "morning"
+    elif 12 <= hour < 18:
+        return "afternoon"
+    elif 18 <= hour < 23:
+        return "night"
+    else:
+        return "late"
+
+def get_weighted_phrase():
+    phrases, weights = zip(*PHRASES_WEIGHTED)
+    return random.choices(phrases, weights=weights, k=1)[0]
+
+def get_splash_phrase():
+    if random.random() < 0.4:
+        period = get_time_period()
+        return random.choice(TIME_PHRASES[period])
+    else:
+        return get_weighted_phrase()
 
 # =========================
 # WELCOME SCREEN
@@ -48,47 +111,7 @@ class WelcomeScreen(QWidget):
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QFont("Segoe UI", 24, QFont.Bold))
         
-        phrases = [
-    
-    "Infinidade. Para ir além...",
-    "Não vai te deixar no vácuo...",
-    
-    "Organize o caos. Ou abrace ele...",
-    "Tentando achar a borda do app...",
-    
-    "Cérebro 2",
-    "Carregando o infinito...",
-    
-    "Que o armazenamento esteja com você...",
-    "Poder ILIMITADO p%#☠︎︎@...",
-    "Com grandes espaços, vem grandes responsabilidades...",
-    "Por que está tão sério?",
-    "SOU AMENDOBOBO! YEAH!",
-    "GRIFFITH!",
-    "Também experimente Minecraft!",
-    "Alguém lê isso mesmo?",
-    "41, o número mais malvado de todos...",
-    "Tão incrível quanto macacos árticos...",
-    "A épica nunca pediria sua senha...",
-    "Eu... te... vi... Lá no canto da sala...",
-    "UwU",
-
-    "As coisa cai...",
-    "Só sabo que nada sebo...",
-    "Penso. Logo desisto...",
-    "O homem nasce bom. As assinaturas o corrompem...",
-
-    "nada 👍",
-    "Só inicia logo o app 😒",
-    "Não se envergonhe, é só clicar aqui 👇",
-
-    "Robux grátis >aqui<",
-    "Não se esqueça de alimentar o seu Pou..."
-    "Eu sempre volto..."
-
-
-]
-        subtitle = QLabel(random.choice(phrases))
+        subtitle = QLabel(get_splash_phrase())
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setStyleSheet("font-size: 14px;""color: #888;")
 
@@ -246,13 +269,14 @@ class CanvasView(QGraphicsView):
         #add ui
 
         #ativar e desativar barras
-        #self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        #self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # 🔹 botões flutuantes
-        self.tools_btn = FloatingButton("🧰", self)
+        self.tools_btn = FloatingButton("➕", self)
         self.settings_btn = FloatingButton("⚙️", self)
 
+        #botao de ferramentas e config
         self.tools_btn.clicked.connect(self.on_tools_clicked)
         self.settings_btn.clicked.connect(self.on_settings_clicked)
 
@@ -368,7 +392,8 @@ class CanvasView(QGraphicsView):
         print("Ferramentas clicado")
 
     def on_settings_clicked(self):
-        print("Configurações clicado")
+        dialog = SettingsDialog(self)
+        dialog.exec()
 
     def _fade_out_zoom_label(self):
         anim = QPropertyAnimation(self.zoom_effect, b"opacity", self)
@@ -527,6 +552,103 @@ class MainWindow(QMainWindow):
          fade_out.finished.connect(on_fade_out_finished)
          fade_out.start()
          self.fade_out = fade_out
+
+# =========================
+# SETTINGS
+# =========================
+
+class SettingsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("Configurações")
+        self.setFixedSize(420, 300)
+
+        layout = QVBoxLayout(self)
+
+        #TABS
+
+        tabs = QTabWidget()
+        tabs.setStyleSheet("""
+    QTabBar::tab {
+        background: #2f2f2f;
+        padding: 6px 12px;
+        border-radius: 6px;
+        margin-right: 4px;
+    }
+    QTabBar::tab:selected {
+        background: #3a3a3a;
+    }
+""")
+
+        layout.addWidget(tabs)
+
+        #SETTINGS TAB
+
+        settings_tab = QWidget()
+        settings_layout = QVBoxLayout(settings_tab)
+
+        settings_layout.addWidget(QLabel("Não tem nada aqui, pode ir embora!"))
+        settings_layout.addStretch()
+
+        tabs.addTab(settings_tab, "Configurações")
+
+        #GERAL
+
+        general_tab = QWidget()
+        general_layout = QVBoxLayout(general_tab)
+
+        general_layout.addWidget(QLabel("Continua sem nada aqui!"))
+        general_layout.addStretch()
+
+        tabs.addTab(general_tab, "Geral")
+
+        #APLICAÇÃO
+
+        theapp_tab = QWidget()
+        theapp_layout = QVBoxLayout(theapp_tab)
+
+        theapp_layout.addWidget(QLabel("Nada, que surpresa né?"))
+        theapp_layout.addStretch()
+
+        tabs.addTab(theapp_tab, "App")
+
+        #INFO
+
+        title = QLabel(APP_NAME)
+        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        title.setAlignment(Qt.AlignCenter)
+
+        version = QLabel(f"Versão {APP_VERSION}")
+        version.setAlignment(Qt.AlignCenter)
+        version.setStyleSheet("color: #888;")
+
+        tagline = QLabel(f"“{APP_TAGLINE}”")
+        tagline.setAlignment(Qt.AlignCenter)
+        tagline.setWordWrap(True)
+        tagline.setStyleSheet("color: #aaa; font-style: italic;")
+
+        tech = QLabel(APP_TECH)
+        tech.setAlignment(Qt.AlignCenter)
+        tech.setStyleSheet("color: #777; font-size: 11px;")
+
+        github = QLabel(
+            f'<a href="{APP_GITHUB}">GitHub</a>'
+        )
+        github.setAlignment(Qt.AlignCenter)
+        github.setOpenExternalLinks(True)
+        github.setStyleSheet("color: #6fa8dc;")
+
+        layout.addStretch()
+        layout.addWidget(title)
+        layout.addWidget(version)
+        layout.addSpacing(8)
+        layout.addWidget(tagline)
+        layout.addSpacing(12)
+        layout.addWidget(tech)
+        layout.addSpacing(6)
+        layout.addWidget(github)
+        layout.addStretch()
 
 # =========================
 # APP
