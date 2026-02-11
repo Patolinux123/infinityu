@@ -7,7 +7,7 @@ from app_info import *
 
 from pathlib import Path
 
-from enum import Enum
+from enum import Enum, auto
 
 from datetime import datetime
 
@@ -37,7 +37,7 @@ TIME_PHRASES = {
     "morning": [
         "Bom dia! Ideias ainda estão acordando...",
         "Café primeiro. Ideias depois...",
-        "O dia está só começando. Aproveite..."
+        "O dia está só começando. Vamos anotar..."
     ],
     "afternoon": [
         "Boa tarde! Ideias prontas pro serviço...",
@@ -47,14 +47,14 @@ TIME_PHRASES = {
     "night": [
         "Boa noite! Ideias indo para a cama...",
         "O sol se põe e nasce a lua...",
-        "Brilha, brilha, estrelinha ⭐"
+        "Brilha, brilha, estrelinha..."
     ],
     "late": [
-        "Ideia das 3 da manhã 😴",
+        "Ideia das 3 da manhã...",
         "Deitar é para os fracos!",
         "Pare. Anote. Durma.",
         "Nesse horário, ou sua melhor ideia ou sua outra melhor ideia...",
-        "Ei! Eu quero dormir também! 🥱"
+        "Ei! Eu quero dormir também!"
     ]
 }
 
@@ -89,6 +89,12 @@ def get_splash_phrase():
     else:
         return get_weighted_phrase()
 
+#tols stuff
+class CardType(Enum):
+    TEXT = auto()
+    IMAGE = auto()
+    AUDIO = auto()
+
 # =========================
 # WELCOME SCREEN
 # =========================
@@ -107,7 +113,7 @@ class WelcomeScreen(QWidget):
         container.setAlignment(Qt.AlignCenter)
         container.setSpacing(16)
 
-        title = QLabel("infinityu")
+        title = QLabel(APP_NAME)
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QFont("Segoe UI", 24, QFont.Bold))
         
@@ -208,13 +214,40 @@ class CanvasCard(QGraphicsItem):
         painter.setPen(QColor("#333333"))
         painter.drawRoundedRect(self.rect, 12, 12)
 
+#some classes
+class TextCard(CanvasCard):
+    def __init__(self, pos):
+        super().__init__(pos.x(), pos.y())
+        self.setPos(pos)
+
+class ImageCard(CanvasCard):
+    def __init__(self, pos):
+        super().__init__(pos.x(), pos.y())
+        self.setPos(pos)
+
+class AudioCard(CanvasCard):
+    def __init__(self, pos):
+        super().__init__(pos.x(), pos.y())
+        self.setPos(pos)
+
+CARD_CLASSES = {
+    CardType.TEXT: TextCard,
+    CardType.IMAGE: ImageCard,
+    CardType.AUDIO: AudioCard,
+}
+
 class CanvasScene(QGraphicsScene):
     def __init__(self):
         super().__init__()
         self.setSceneRect(-3000, -3000, 4000, 2000)
 
-    def create_card(self, pos):
-        card = CanvasCard(pos.x(), pos.y())
+    def create_card(self, pos, card_type=CardType.TEXT):
+        card_class = CARD_CLASSES.get(card_type)
+        if not card_class:
+           return
+
+        card = card_class(pos)
+
         self.addItem(card)
 
     def drawBackground(self, painter, rect):
@@ -323,6 +356,40 @@ class CanvasView(QGraphicsView):
         self.zoom_label.move(12, 12)
         self.zoom_label.show()
 
+        #tools
+        self.tools_panel = ToolsPanel(self)
+        self.tools_panel.hide()
+
+        self.tools_btn.clicked.connect(self.toggle_tools_panel)
+
+        self.current_card_type = CardType.TEXT
+
+        self.tools_panel.text_btn.clicked.connect(lambda: self.set_tool(CardType.TEXT))
+        self.tools_panel.image_btn.clicked.connect(lambda: self.set_tool(CardType.IMAGE))
+        self.tools_panel.audio_btn.clicked.connect(lambda: self.set_tool(CardType.AUDIO))
+
+        self.tools_panel.raise_()
+
+    def set_tool(self, tool):
+        self.current_tool = tool
+        self.tools_panel.hide()
+
+    def toggle_tools_panel(self):
+        if self.tools_panel.isVisible():
+           self.tools_panel.hide()
+        else:
+            self.tools_panel.show()
+            self.position_tools_panel()
+
+    def position_tools_panel(self):
+        btn = self.tools_btn
+        panel = self.tools_panel
+
+        x = btn.x() + btn.width()//2 - panel.width()//2
+        y = btn.y() - panel.height() - 10  # margem
+
+        panel.move(x, y)
+
     def event(self, event):
         if event.type() == QEvent.Gesture:
             return self.gestureEvent(event)
@@ -389,7 +456,7 @@ class CanvasView(QGraphicsView):
     )
 
     def on_tools_clicked(self):
-        print("Ferramentas clicado")
+        pass
 
     def on_settings_clicked(self):
         dialog = SettingsDialog(self)
@@ -438,7 +505,7 @@ class CanvasView(QGraphicsView):
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
             pos = self.mapToScene(event.position().toPoint())
-            self.scene.create_card(pos)
+            self.scene.create_card(pos, self.current_card_type)
             event.accept()
         else:
             super().mouseDoubleClickEvent(event)
@@ -449,8 +516,19 @@ class CanvasView(QGraphicsView):
             self._pan_start = event.position()
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
-        else:
-            super().mousePressEvent(event)
+            return
+        
+        if self.tools_panel.isVisible():
+           panel_rect = self.tools_panel.geometry()
+
+        # posição do clique relativa ao CanvasView
+           click_pos = event.position().toPoint()
+
+           if not panel_rect.contains(click_pos):
+              self.tools_panel.hide()
+
+        super().mousePressEvent(event)
+
 
     def mouseMoveEvent(self, event):
         if self._panning and self._pan_start is not None:
@@ -476,13 +554,58 @@ class CanvasView(QGraphicsView):
             super().mouseReleaseEvent(event)
 
 # =========================
+# TOOLS
+# =========================
+class ToolsPanel(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setFixedSize(260, 60)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2b2b2b;
+                border-radius: 12px;
+                border: 1px solid #3a3a3a;
+            }
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        layout.addStretch()
+
+        self.text_btn = QPushButton("Text")
+        self.image_btn = QPushButton("Image")
+        self.audio_btn = QPushButton("Audio")
+
+        for btn in [self.text_btn, self.image_btn, self.audio_btn]:
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: #3a3a3a;
+                    color: #ddd;
+                    border-radius: 8px;
+                    padding: 6px 10px;
+                }
+                QPushButton:hover {
+                    background: #444;
+                }
+            """)
+            layout.addWidget(btn)
+
+    def set_card_type(self, card_type):
+        self.parent().current_card_type = card_type
+        self.hide()
+
+# =========================
 # MAIN WINDOW
 # =========================
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("infinityu")
+        self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon("iconwhite.ico"))
         self.resize(1280, 720)
 

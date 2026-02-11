@@ -1,8 +1,8 @@
 # infinityu
 
-> Uma tela (quase) infinita para organizar ideias — ou pelo menos tentar.
+> Uma tela **quase** infinita para organizar ideias — ou pelo menos tentar.
 
-infinityu é um app desktop em desenvolvimento focado em pensar visualmente: cards soltos em um canvas infinito para ideias crescerem sem limite.
+infinityu é um app desktop em desenvolvimento focado em pensar visualmente: cards soltos em uma tela **quase** infinita para ideias crescerem sem limite.
 
 **Ainda não é um produto final.**
 
