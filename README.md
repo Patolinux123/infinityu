@@ -1,15 +1,16 @@
 # infinityu
 
-> Um canvas infinito para organizar ideias — ou pelo menos tentar.
+> Uma tela (quase) infinita para organizar ideias — ou pelo menos tentar.
 
-infinityu é um app desktop em desenvolvimento focado em **pensar visualmente**: cards soltos em um canvas infinito para ideias crescerem sem limite.
+infinityu é um app desktop em desenvolvimento focado em pensar visualmente: cards soltos em um canvas infinito para ideias crescerem sem limite.
 
-Ainda não é um produto final.  
-Mas já é um bom começo.
+**Ainda não é um produto final.**
+
+**Mas já é um bom começo.**
 
 ---
 
-## ✨ O que já funciona
+## ✨ O que já funciona:
 
 - 🧠 **Canvas infinito**
 - 🔍 **Zoom com mouse e trackpad**
@@ -18,11 +19,11 @@ Mas já é um bom começo.
 - 🟦 **Grid visual**
 - 🧰 **Botões flutuantes de ferramentas e configurações**
 - ⚙️ **Janela de configurações (em expansão)**
-- 🎭 **Splash screen com frases irônicas / filosóficas**
+- 🎭 **Splash screen com frases irônicas**
 
 ---
 
-## 🚧 Em desenvolvimento
+## 🚧 Em desenvolvimento:
 
 - Diferentes tipos de card (Texto, Áudio, Imagem, Documento…)
 - Sistema de ferramentas mais completo
@@ -30,7 +31,7 @@ Mas já é um bom começo.
 - Mais opções nas configurações
 - Refinamento geral de UX/UI
 
-Este projeto ainda está em **fase experimental / alpha**.
+⚠️ Importante notar que o projeto ainda se apresenta em **fase experimental / alpha**.
 
 ---
 

@@ -1,4 +1,4 @@
-import sys
+import sys, os
 import math
 import random
 import json
@@ -26,7 +26,7 @@ from PySide6.QtGui import QFont, QPainter, QIcon, QFontDatabase, QColor
 
 PLACEHOLDER_TEXTS = [
     "Escreva uma ideia aqui…",
-    "O que você está pensando?",
+    "No que está pensando?",
     "Comece digitando…",
     "Planeje algo incrível…",
     "Escreva maravilhas…",
