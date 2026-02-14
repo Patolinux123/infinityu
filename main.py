@@ -13,12 +13,12 @@ from datetime import datetime
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
-    QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QStackedWidget, QGraphicsView, QPinchGesture, QDialog, QTabWidget,
+    QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGraphicsPixmapItem,
+    QStackedWidget, QGraphicsView, QPinchGesture, QDialog, QFileDialog, QTabWidget,
     QGraphicsScene, QGraphicsOpacityEffect, QFrame, QGraphicsItem, QGraphicsTextItem, QAbstractScrollArea, QGestureEvent, QPanGesture
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QRectF, QTimer, QEvent
-from PySide6.QtGui import QFont, QPainter, QIcon, QFontDatabase, QColor
+from PySide6.QtGui import QFont, QPainter, QIcon, QPixmap, QFontDatabase, QColor
 
 # =========================
 # stuff
@@ -146,90 +146,104 @@ class WelcomeScreen(QWidget):
         root.addLayout(container)
         root.addStretch()
 
-
 # =========================
-# CANVAS
+# CANVAS CARDS
 # =========================
 class CanvasCard(QGraphicsItem):
-    def __init__(self, x, y):
+    def __init__(self, x, y, width=220, height=140):
         super().__init__()
-
-        self.rect = QRectF(0, 0, 220, 140)
+        self.rect = QRectF(0, 0, width, height)
         self.setPos(x, y)
 
         self.setFlag(QGraphicsItem.ItemIsMovable)
         self.setFlag(QGraphicsItem.ItemIsSelectable)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
 
+    def boundingRect(self):
+        return self.rect.adjusted(-6, -6, 6, 6)
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionChange:
+            grid = 15
+            x = round(value.x() / grid) * grid
+            y = round(value.y() / grid) * grid
+            return value.__class__(x, y)
+        return super().itemChange(change, value)
+
+    def paint(self, painter: QPainter, option, widget=None):
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QColor("#333333"))
+        painter.setPen(QColor("#333333"))
+        painter.drawRoundedRect(self.rect, 12, 12)
+
+
+class TextCard(CanvasCard):
+    def __init__(self, pos):
+        super().__init__(pos.x(), pos.y())
         self.text_item = QGraphicsTextItem(self)
         self.text_item.setTextInteractionFlags(Qt.TextEditorInteraction)
-        self.text_item.setDefaultTextColor(QColor("#FFF"))
+        self.text_item.setDefaultTextColor(Qt.white)
         self.text_item.setTextWidth(self.rect.width() - 20)
         self.text_item.setPos(10, 10)
-
-        self.text_item.focusInEvent = self._on_focus_in
-        self.text_item.focusOutEvent = self._on_focus_out
-
-        self.placeholder_text = random.choice(PLACEHOLDER_TEXTS)
-        self.is_placeholder = True
-
-        self._apply_placeholder()
 
         font = QFont("Segoe UI", 10)
         self.text_item.setFont(font)
 
+        # placeholder
+        self.placeholder_text = random.choice(PLACEHOLDER_TEXTS)
+        self.is_placeholder = True
+        self._apply_placeholder()
+
+        self.text_item.focusInEvent = self._on_focus_in
+        self.text_item.focusOutEvent = self._on_focus_out
+
     def _on_focus_in(self, event):
         if self.is_placeholder:
-             self.text_item.setPlainText("")
-             self.text_item.setDefaultTextColor(QColor(230, 230, 230))
-             self.is_placeholder = False
+            self.text_item.setPlainText("")
+            self.text_item.setDefaultTextColor(QColor(230, 230, 230))
+            self.is_placeholder = False
 
     def _on_focus_out(self, event):
         if not self.text_item.toPlainText().strip():
-             self.is_placeholder = True
-             self._apply_placeholder()
+            self.is_placeholder = True
+            self._apply_placeholder()
 
     def _apply_placeholder(self):
         self.text_item.setPlainText(self.placeholder_text)
         self.text_item.setDefaultTextColor(QColor(150, 150, 150))
 
-    def boundingRect(self):
-        return self.rect.adjusted(-6, -6, 6, 6)
-    
-    def itemChange(self, change, value):
-        if change == QGraphicsItem.ItemPositionChange:
-            
-                grid = 15
-                x = round(value.x() / grid) * grid
-                y = round(value.y() / grid) * grid
-                return value.__class__(x, y)
-        
-        return super().itemChange(change, value)
-
-    def paint(self, painter: QPainter, option, widget=None):
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        # card
-        painter.setBrush(QColor("#333333"))
-        painter.setPen(QColor("#333333"))
-        painter.drawRoundedRect(self.rect, 12, 12)
-
-#some classes
-class TextCard(CanvasCard):
-    def __init__(self, pos):
-        super().__init__(pos.x(), pos.y())
-        self.setPos(pos)
 
 class ImageCard(CanvasCard):
     def __init__(self, pos):
         super().__init__(pos.x(), pos.y())
-        self.setPos(pos)
+        file_path, _ = QFileDialog.getOpenFileName(
+            None, "Escolher imagem", "", "Images (*.png *.jpg *.jpeg *.bmp)"
+        )
+        if not file_path:
+            return
+
+        pixmap = QPixmap(file_path)
+        self.image_item = QGraphicsPixmapItem(pixmap, self)
+        self.image_item.setPos(10, 10)
+
+        # redimensionar para caber
+        self.image_item.setScale(
+            min(
+                (self.rect.width() - 20) / pixmap.width(),
+                (self.rect.height() - 20) / pixmap.height()
+            )
+        )
+
 
 class AudioCard(CanvasCard):
     def __init__(self, pos):
         super().__init__(pos.x(), pos.y())
-        self.setPos(pos)
+        self.label = QGraphicsTextItem("🎵 Audio", self)
+        self.label.setDefaultTextColor(Qt.white)
+        self.label.setPos(10, 10)
 
+
+# Dicionário de integração com ToolsPanel
 CARD_CLASSES = {
     CardType.TEXT: TextCard,
     CardType.IMAGE: ImageCard,
@@ -244,10 +258,8 @@ class CanvasScene(QGraphicsScene):
     def create_card(self, pos, card_type=CardType.TEXT):
         card_class = CARD_CLASSES.get(card_type)
         if not card_class:
-           return
-
+            return
         card = card_class(pos)
-
         self.addItem(card)
 
     def drawBackground(self, painter, rect):
@@ -270,7 +282,7 @@ class FloatingButton(QPushButton):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
 
-        self.setFixedSize(42, 42)
+        self.setFixedSize(52, 52)
         self.setCursor(Qt.PointingHandCursor)
 
         self.setStyleSheet("""
@@ -314,6 +326,7 @@ class CanvasView(QGraphicsView):
         self.settings_btn.clicked.connect(self.on_settings_clicked)
 
         #zoom trackpad
+        self._zoom = 0
         self.grabGesture(Qt.PinchGesture)
        
         #pan
@@ -358,15 +371,20 @@ class CanvasView(QGraphicsView):
 
         #tools
         self.tools_panel = ToolsPanel(self)
+
+        #button fixed width & height
+        self.tools_panel.setFixedWidth(110)
+        self.tools_panel.setFixedHeight(200)
+    
         self.tools_panel.hide()
 
         self.tools_btn.clicked.connect(self.toggle_tools_panel)
 
         self.current_card_type = CardType.TEXT
 
-        self.tools_panel.text_btn.clicked.connect(lambda: self.set_tool(CardType.TEXT))
-        self.tools_panel.image_btn.clicked.connect(lambda: self.set_tool(CardType.IMAGE))
-        self.tools_panel.audio_btn.clicked.connect(lambda: self.set_tool(CardType.AUDIO))
+        self.tools_panel.text_btn.clicked.connect(lambda: self.add_card(CardType.TEXT))
+        self.tools_panel.image_btn.clicked.connect(lambda: self.add_card(CardType.IMAGE))
+        self.tools_panel.audio_btn.clicked.connect(lambda: self.add_card(CardType.AUDIO))
 
         self.tools_panel.raise_()
 
@@ -415,12 +433,14 @@ class CanvasView(QGraphicsView):
 
     def handle_pinch(self, pinch: QPinchGesture):
         if pinch.state() == Qt.GestureStarted:
+
             self._pinch_start_zoom = self._zoom
+
             return
 
         scale = pinch.scaleFactor()
 
-        zoom_step = 1.08
+        zoom_step = 1.09
         zoom_delta = math.log(scale, zoom_step)
 
         new_zoom = self._zoom + zoom_delta
@@ -553,6 +573,12 @@ class CanvasView(QGraphicsView):
         else:
             super().mouseReleaseEvent(event)
 
+    def add_card(self, card_type):
+        # centro visível da view
+        center_pos = self.mapToScene(self.viewport().rect().center())
+
+        self.scene.create_card(center_pos, card_type)
+
 # =========================
 # TOOLS
 # =========================
@@ -569,7 +595,7 @@ class ToolsPanel(QWidget):
             }
         """)
 
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
@@ -652,7 +678,7 @@ class MainWindow(QMainWindow):
          fade_out.setEndValue(0.0)
 
          def on_fade_out_finished():
-        # troca a tela
+             # troca a tela
              self.stack.setCurrentWidget(self.canvas)
 
              fade_in = QPropertyAnimation(effect, b"opacity")
@@ -661,10 +687,10 @@ class MainWindow(QMainWindow):
              fade_in.setEndValue(1.0)
 
              def cleanup():
-            # remover o efeito
+                 # remover o efeito
                  self.container.setGraphicsEffect(None)
 
-                # força repaint completo
+                 # força repaint completo
                  self.container.update()
                  self.canvas.viewport().update()
 
